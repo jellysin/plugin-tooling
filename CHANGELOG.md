@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/jellysin/plugin-tooling/compare/v1.0.1...v1.0.2) (2026-09-08)
+
+
+### Bug Fixes
+
+* recover attested drafts by stable release identity ([#9](https://github.com/jellysin/plugin-tooling/issues/9)) ([d6e1272](https://github.com/jellysin/plugin-tooling/commit/d6e127221eeb58b03626a261ee02929f5dd9a474))
+
 ## [1.0.1](https://github.com/jellysin/plugin-tooling/compare/v1.0.0...v1.0.1) (2026-09-08)
 
 

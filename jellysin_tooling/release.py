@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+from urllib.parse import quote
 
 from . import spdx
 from .catalog import release_assets, validate_archive, validate_release
@@ -29,6 +30,69 @@ def remote_tag(client, repo, tag):
         require(obj.get("type") == "tag", "Remote tag does not identify a commit")
         obj = client.api(f"repos/{repo}/git/tags/{obj['sha']}").get("object", {})
     raise ValueError("Annotated tag nesting exceeds limit")
+
+
+def release_identity(remote, repo, tag, release_id=None):
+    require(isinstance(remote, dict), "Invalid GitHub release response")
+    identity = remote.get("id")
+    require(type(identity) is int and identity > 0, "Invalid GitHub release ID")
+    require(release_id is None or identity == release_id, "Release identity changed")
+    require(remote.get("tag_name") == tag, "Release tag changed")
+    require(remote.get("prerelease") is False and type(remote.get("draft")) is bool, "Unexpected release state")
+    require(
+        remote.get("url") == f"https://api.github.com/repos/{repo}/releases/{identity}",
+        "Release repository identity changed",
+    )
+    return identity
+
+
+def find_release(client, repo, tag):
+    require(isinstance(client.token, str) and bool(client.token.strip()), "Authenticated release lookup is required")
+    matches = []
+    for page in range(1, 11):
+        releases = client.api(f"repos/{repo}/releases?per_page=100&page={page}")
+        require(isinstance(releases, list) and len(releases) <= 100, "Invalid GitHub releases response")
+        for remote in releases:
+            require(
+                isinstance(remote, dict) and isinstance(remote.get("tag_name"), str), "Invalid GitHub release entry"
+            )
+            if remote["tag_name"] == tag:
+                release_identity(remote, repo, tag)
+                matches.append(remote)
+                require(len(matches) <= 1, "Multiple releases match the exact tag")
+        if len(releases) < 100:
+            require(len(matches) == 1, "No visible release matches the exact tag")
+            return matches[0]
+    raise ValueError("Release history exceeds 1000-entry scan limit")
+
+
+def read_release(client, repo, tag, release_id):
+    remote = client.api(f"repos/{repo}/releases/{release_id}")
+    release_identity(remote, repo, tag, release_id)
+    return remote
+
+
+def publication_context(repo, tag, commit, verified_tag_recovery):
+    if verified_tag_recovery:
+        require(os.environ.get("GITHUB_ACTIONS") == "true", "Recovery requires a GitHub Actions workflow")
+        require(
+            os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch", "Recovery requires manual workflow dispatch"
+        )
+        require(os.environ.get("GITHUB_REF") == "refs/heads/main", "Recovery must run from main")
+        require(os.environ.get("GITHUB_REPOSITORY") == repo, "Recovery repository differs")
+        expected = f"{repo}/.github/workflows/recover-release.yml@refs/heads/main"
+        require(os.environ.get("GITHUB_WORKFLOW_REF") == expected, "Unapproved recovery workflow")
+        workflow_commit = os.environ.get("GITHUB_SHA", "")
+        require(SHA.fullmatch(workflow_commit), "Invalid recovery workflow commit")
+        require(os.environ.get("GITHUB_WORKFLOW_SHA") == workflow_commit, "Recovery workflow identity differs")
+        command(["git", "merge-base", "--is-ancestor", commit, workflow_commit])
+        command(["git", "merge-base", "--is-ancestor", commit, "refs/remotes/origin/main"])
+    elif os.environ.get("GITHUB_ACTIONS") == "true":
+        require(os.environ.get("GITHUB_REF") == "refs/tags/" + tag, "Publication must run on the tag ref")
+        require(
+            os.environ.get("GITHUB_REPOSITORY") == repo and os.environ.get("GITHUB_SHA") == commit,
+            "Workflow source differs from release",
+        )
 
 
 def local_artifacts(directory, release):
@@ -88,9 +152,9 @@ def draft_starters(remote, files, repo, tag):
     return {**remote, "assets": uploaded}, pending
 
 
-def remove_draft_starters(client, pending, repo, tag, runner):
+def remove_draft_starters(client, pending, repo, tag, release_id, runner):
     for asset in pending:
-        current = client.api(f"repos/{repo}/releases/tags/{tag}")
+        current = read_release(client, repo, tag, release_id)
         require(current.get("draft") is True, "Release is no longer a draft")
         matches = [entry for entry in current.get("assets", []) if entry.get("id") == asset["id"]]
         require(len(matches) == 1 and matches[0] == asset, "Incomplete draft asset changed before recovery")
@@ -98,16 +162,38 @@ def remove_draft_starters(client, pending, repo, tag, runner):
         runner(["gh", "api", "--method", "DELETE", f"repos/{repo}/releases/assets/{asset['id']}"])
 
 
-def publish(client, directory, repo, tag, workflow, verifier=verify_attestation, runner=command):
+def upload_missing(client, directory, files, missing, repo, tag, release_id, runner):
+    for name in missing:
+        current = read_release(client, repo, tag, release_id)
+        require(current.get("draft") is True, "Release is no longer a draft")
+        if name not in reconcile_assets(client, current, files, repo, tag):
+            continue
+        endpoint = f"https://uploads.github.com/repos/{repo}/releases/{release_id}/assets?name={quote(name, safe='')}"
+        runner(
+            [
+                "gh",
+                "api",
+                "--method",
+                "POST",
+                endpoint,
+                "--input",
+                str(Path(directory) / name),
+                "--header",
+                "Content-Type: application/octet-stream",
+                "--header",
+                f"Content-Length: {len(files[name])}",
+                "--silent",
+            ]
+        )
+
+
+def publish(
+    client, directory, repo, tag, workflow, verifier=verify_attestation, runner=command, *, verified_tag_recovery=False
+):
     repository(repo)
     require(workflow == ".github/workflows/release.yml", "Unapproved publisher workflow")
     commit = exact_tag(tag)
-    if os.environ.get("GITHUB_ACTIONS") == "true":
-        require(os.environ.get("GITHUB_REF") == "refs/tags/" + tag, "Publication must run on the tag ref")
-        require(
-            os.environ.get("GITHUB_REPOSITORY") == repo and os.environ.get("GITHUB_SHA") == commit,
-            "Workflow source differs from release",
-        )
+    publication_context(repo, tag, commit, verified_tag_recovery)
     release = read_json(Path(directory) / "release.json")
     approved = {"repository": repo, "guid": release.get("plugin", {}).get("guid")}
     validate_release(release, approved, tag)
@@ -115,18 +201,32 @@ def publish(client, directory, repo, tag, workflow, verifier=verify_attestation,
     files = local_artifacts(directory, release)
     for name in sorted(files):
         verifier(Path(directory) / name, repo, workflow, commit, tag)
-    remote = client.api(f"repos/{repo}/releases/tags/{tag}")
-    require(remote.get("tag_name") == tag and not remote.get("prerelease"), "Unexpected release state")
+    found = find_release(client, repo, tag)
+    release_id = found["id"]
+    remote = read_release(client, repo, tag, release_id)
     remote, pending = draft_starters(remote, files, repo, tag)
     missing = reconcile_assets(client, remote, files, repo, tag)
-    remove_draft_starters(client, pending, repo, tag, runner)
-    for name in missing:
-        runner(["gh", "release", "upload", tag, str(Path(directory) / name), "--repo", repo])
-    refreshed = client.api(f"repos/{repo}/releases/tags/{tag}")
+    remove_draft_starters(client, pending, repo, tag, release_id, runner)
+    upload_missing(client, directory, files, missing, repo, tag, release_id, runner)
+    refreshed = read_release(client, repo, tag, release_id)
     require(not reconcile_assets(client, refreshed, files, repo, tag), "Release upload is incomplete")
     if refreshed.get("draft") is True:
-        runner(["gh", "release", "edit", tag, "--repo", repo, "--draft=false", "--latest=true"])
-    published = client.api(f"repos/{repo}/releases/tags/{tag}")
+        require(remote_tag(client, repo, tag) == commit, "Remote tag changed before publication")
+        runner(
+            [
+                "gh",
+                "api",
+                "--method",
+                "PATCH",
+                f"repos/{repo}/releases/{release_id}",
+                "--field",
+                "draft=false",
+                "--raw-field",
+                "make_latest=true",
+                "--silent",
+            ]
+        )
+    published = read_release(client, repo, tag, release_id)
     require(
         published.get("draft") is False and published.get("immutable") is True,
         "Published release must be immutable; enable repository immutable releases before publishing",

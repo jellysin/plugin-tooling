@@ -46,6 +46,18 @@ mismatch needs a new version; an incomplete published release is never repaired.
 Only expected zero-byte `starter` assets in a freshly revalidated draft may be
 deleted during failed-upload recovery. A changed or uploaded asset stops recovery.
 
+If an original tag already has verified attestations but its publisher cannot
+finish, a reviewed `recover-release.yml` may opt into `verified-tag-recovery`.
+Dispatch that workflow from `main`; retain the actual GitHub context variables and
+check out the exact original tag with full history and fetched `origin/main`.
+Its source must be an ancestor of both the workflow's immutable commit and
+`origin/main`. Rebuild reproducibly and verify the original artifact attestations;
+do not re-attest recovery builds or change the tag. Grant only repository-scoped
+contents writes for publication, with no attestation or OIDC write permissions.
+The publisher independently enforces this context, all original provenance checks,
+and numeric release identity. A vanished draft requires investigation, not a
+replacement selected by tag.
+
 Use only the calling repository's GITHUB_TOKEN. Catalog publication runs in the
 catalog repository and opens its own PR. No cross-repository write token, release
 App, runtime package, or installed plugin dependency is required.

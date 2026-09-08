@@ -28,6 +28,7 @@ def parser():
     publish.add_argument("--repo", required=True)
     publish.add_argument("--tag", required=True)
     publish.add_argument("--workflow", default=".github/workflows/release.yml")
+    publish.add_argument("--verified-tag-recovery", action="store_true")
     update = commands.add_parser("catalog")
     update.add_argument("--manifest", default="manifest.json")
     update.add_argument("--allowlist", default="plugins.json")
@@ -69,7 +70,14 @@ def run(arguments):
                 stream.write(f"directory={Path(arguments.output_directory).resolve()}\n")
         return
     if arguments.command == "publish":
-        release.publish(GitHub(), arguments.directory, arguments.repo, arguments.tag, arguments.workflow)
+        release.publish(
+            GitHub(),
+            arguments.directory,
+            arguments.repo,
+            arguments.tag,
+            arguments.workflow,
+            verified_tag_recovery=arguments.verified_tag_recovery,
+        )
         return
     current = catalog.validate_manifest(read_json(arguments.manifest))
     approved = catalog.allowlist(read_json(arguments.allowlist))

@@ -1,5 +1,5 @@
 name: Check repository policy
-description: Validate repository documents, immutable Action pins, and optionally a Jellyfin catalog.
+description: Validate repository documents, immutable Action pins, and optionally a Jellyfin plugin repository.
 inputs:
   directory:
     description: Repository directory.

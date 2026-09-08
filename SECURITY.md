@@ -9,6 +9,6 @@ The current stable tooling release is supported. Consumers should apply released
 security fixes through reviewed SHA updates. Published assets remain immutable;
 security fixes receive new versions.
 
-The catalog trusts a reviewed source repository and release workflow. A valid
+The plugin repository trusts a reviewed source repository and release workflow. A valid
 attestation establishes that identity; it does not prove the source is harmless.
 Review workflow, dependency, and allowlist changes as security-sensitive changes.

@@ -1,7 +1,7 @@
-# JellySin plugin tooling
+# JellySin Release Helper
 
 Shared, versioned build and release tools for independent Jellyfin 12 plugins.
-Python's standard library handles packaging and catalog validation; GitHub CLI
+Python's standard library handles packaging and plugin repository validation; GitHub CLI
 verifies signed provenance and performs repository-scoped publication. None of
 this tooling is loaded by an installed plugin.
 
@@ -18,7 +18,7 @@ python tools.py package --publish-directory artifacts/plugin --tag v1.0.0
 ```
 
 Output: plugin ZIP, `release.json`, `checksums.txt` (SHA-256), and an SPDX 2.3
-inventory. MD5 serves Jellyfin's catalog format. SPDX's required SHA-1 file
+inventory. MD5 serves Jellyfin's plugin repository format. SPDX's required SHA-1 file
 checksums and package verification code accompany SHA-256; security verification
 uses SHA-256 and attestations. Shipped files and external dependencies are distinct.
 Unverified third-party licenses remain `NOASSERTION`.
@@ -56,7 +56,7 @@ PURLs and archive hashes. Declared host packages also have runtime relationships
 their DLLs are not included. It records the SDK pin and a SHA-256 fingerprint of
 canonical lock JSON, so checkout paths and line endings do not alter the inventory.
 The same graph is stored in optional `release.json.dependencyInventory` and is
-checked against the SBOM by both publisher and catalog. Without these inputs the
+checked against the SBOM by both publisher and plugin repository. Without these inputs the
 document covers shipped files only. SDK internals, the installed host's full
 dependency tree and frontend development tools are outside this production graph.
 
@@ -79,20 +79,20 @@ not clear that separate approval gate. This is the documented
 Maintainers approve the actual PR workflow after reviewing the current changes.
 The automation retains only the built-in token; unattended PR merging is not promised.
 
-## Catalog trust and recovery
+## Plugin repository trust and recovery
 
 Only allowlisted public releases are accepted. Every new artifact needs valid
 signatures bound to the repository, approved workflow, source SHA, exact tag and
 GitHub-hosted runner. Metadata, checksums, ZIP entries and the complete expected
 SPDX identity, file inventory and dependency relationships are validated
-before the catalog changes. Existing catalog versions are preserved.
+before the plugin repository changes. Existing plugin repository versions are preserved.
 
 Scans are bounded to 32 repositories, 1,000 releases per repository, and 20 new
-versions per batch; remaining releases follow after that catalog PR merges.
+versions per batch; remaining releases follow after that plugin repository PR merges.
 Drafts and prereleases are skipped. Failed or over-limit scans
-leave the catalog unchanged; resolve the source problem and rerun. Already listed
+leave the plugin repository unchanged; resolve the source problem and rerun. Already listed
 versions are not re-downloaded each poll; source repositories must enable immutable
-releases. Catalog changes go through PRs.
+releases. Plugin repository changes go through PRs.
 
 Publication can resume missing draft uploads. GitHub may leave an empty `starter`
 asset after an upload failure; recovery removes it only when its name is expected,
@@ -109,7 +109,7 @@ stop publication without selecting a replacement draft.
 
 Draft assets use their authenticated API IDs and exact repository-owned API URLs
 for validation and download. GitHub's temporary `untagged-...` browser URLs are not
-downloaded. Published release and catalog validation still require the canonical
+downloaded. Published release and plugin repository validation still require the canonical
 browser URL containing the exact version tag.
 
 An already attested tag can opt into `verified-tag-recovery: 'true'` on the publish

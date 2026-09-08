@@ -58,8 +58,8 @@ The publisher independently enforces this context, all original provenance check
 and numeric release identity. A vanished draft requires investigation, not a
 replacement selected by tag.
 
-Use only the calling repository's GITHUB_TOKEN. Catalog publication runs in the
-catalog repository and opens its own PR. No cross-repository write token, release
+Use only the calling repository's GITHUB_TOKEN. Plugin repository updates run in
+`jellysin/repo` and opens its own PR. No cross-repository write token, release
 App, runtime package, or installed plugin dependency is required.
 
 Workflow defaults are read-only. Writes belong to the narrow jobs that need them.

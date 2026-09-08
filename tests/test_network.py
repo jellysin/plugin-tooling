@@ -57,7 +57,7 @@ class NetworkTests(unittest.TestCase):
         for code in (302, 404, 429, 503):
             client.opener.open.side_effect = urllib.error.HTTPError("sensitive-url", code, "private-body", {}, None)
             with self.subTest(code=code), self.assertRaises(ValidationError) as caught:
-                client.api("repos/jellysin/catalog")
+                client.api("repos/jellysin/repo")
             self.assertNotIn("private", str(caught.exception))
             self.assertNotIn("sensitive", str(caught.exception))
 
@@ -77,7 +77,7 @@ class NetworkTests(unittest.TestCase):
     def test_api_json_response_and_path_constraints(self):
         client = GitHub()
         with patch.object(client, "get", return_value=b'{"ok":true}'):
-            self.assertEqual({"ok": True}, client.api("repos/jellysin/catalog"))
+            self.assertEqual({"ok": True}, client.api("repos/jellysin/repo"))
             with self.assertRaises(ValidationError):
                 client.api("users/me")
         self.assertIsNone(NoRedirect().redirect_request(None, None, None, None, None, None))

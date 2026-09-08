@@ -19,7 +19,7 @@ FIRST = {
     "category": "Music",
     "targetAbi": "12.0.0.0",
     "assemblyFile": "JellySin.Plugin.Lastfm.dll",
-    "repository": "jellysin/jellyfin-plugin-lastfm",
+    "repository": "jellysin/plugin-lastfm",
 }
 SECOND = {
     **FIRST,

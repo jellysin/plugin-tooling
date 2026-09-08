@@ -2,7 +2,7 @@
 name = "jellysin-plugin-tooling"
 version = "1.0.0" # x-release-please-version
 description = "Build-time release and catalog tooling for JellySin plugins"
-requires-python = ">=3.13"
+requires-python = "==3.14.7"
 license = "EUPL-1.2"
 dependencies = []
 

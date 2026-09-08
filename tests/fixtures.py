@@ -76,11 +76,13 @@ class FakeGitHub:
             "assets": [],
         }
         for index, file in enumerate(sorted(output.iterdir()), 1):
-            url = f"https://github.com/{repo}/releases/download/{release['tag']}/{file.name}"
+            download_tag = f"untagged-fixture-{identity}" if draft else release["tag"]
+            url = f"https://github.com/{repo}/releases/download/{download_tag}/{file.name}"
             contents = file.read_bytes()
             remote["assets"].append(
                 {
                     "id": index,
+                    "url": f"https://api.github.com/repos/{repo}/releases/assets/{index}",
                     "name": file.name,
                     "state": "uploaded",
                     "size": len(contents),
@@ -91,6 +93,14 @@ class FakeGitHub:
             self.assets[repo, index] = contents
         self.releases.setdefault(repo, []).append(remote)
         return remote
+
+    def publish(self, remote):
+        repo = remote["url"].removeprefix("https://api.github.com/repos/").rsplit("/releases/", 1)[0]
+        for asset in remote["assets"]:
+            url = f"https://github.com/{repo}/releases/download/{remote['tag_name']}/{asset['name']}"
+            self.downloads[url] = self.assets[repo, asset["id"]]
+            asset["browser_download_url"] = url
+        remote.update(draft=False, immutable=True)
 
     def api(self, path):
         self.calls.append(path)

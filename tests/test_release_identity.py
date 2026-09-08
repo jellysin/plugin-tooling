@@ -149,7 +149,7 @@ class ReleaseMutationIdentityTests(Workspace):
             else:
                 self.assertEqual(f"repos/{REPO}/releases/{remote['id']}", arguments[4])
                 self.assertIn("make_latest=true", arguments)
-                remote.update(draft=False, immutable=True)
+                client.publish(remote)
 
         with patch("jellysin_tooling.release.exact_tag", return_value=COMMIT):
             publish(client, output, REPO, TAG, ".github/workflows/release.yml", Mock(), runner)

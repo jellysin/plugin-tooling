@@ -34,7 +34,7 @@ class PublicationTests(Workspace):
             if "POST" in arguments:
                 remote["assets"].append(missing)
             elif "PATCH" in arguments:
-                remote.update(draft=False, immutable=True)
+                client.publish(remote)
 
         with patch("jellysin_tooling.release.exact_tag", return_value=COMMIT):
             result = publish(
@@ -67,7 +67,7 @@ class PublicationTests(Workspace):
             elif "POST" in args:
                 remote["assets"].append(complete)
             elif "PATCH" in args:
-                remote.update(draft=False, immutable=True)
+                client.publish(remote)
 
         with patch("jellysin_tooling.release.exact_tag", return_value=COMMIT):
             publish(
@@ -150,7 +150,7 @@ class PublicationTests(Workspace):
             if "POST" in args:
                 remote["assets"].append(missing)
             if "PATCH" in args:
-                remote.update(draft=False, immutable=True)
+                client.publish(remote)
 
         with patch("jellysin_tooling.release.exact_tag", return_value=COMMIT):
             publish(

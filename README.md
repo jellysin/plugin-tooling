@@ -107,6 +107,11 @@ entries, requires one exact tag match, and pins subsequent reads, uploads and
 publication to that release's numeric ID. Missing, ambiguous or changed identities
 stop publication without selecting a replacement draft.
 
+Draft assets use their authenticated API IDs and exact repository-owned API URLs
+for validation and download. GitHub's temporary `untagged-...` browser URLs are not
+downloaded. Published release and catalog validation still require the canonical
+browser URL containing the exact version tag.
+
 An already attested tag can opt into `verified-tag-recovery: 'true'` on the publish
 Action, or `--verified-tag-recovery` on the CLI. This requires a manually dispatched
 `.github/workflows/recover-release.yml` on the same repository's `main`, with matching

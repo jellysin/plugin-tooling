@@ -33,7 +33,7 @@ class VerifiedRecoveryTests(Workspace):
         def runner(arguments):
             self.assertEqual(4, verifier.call_count)
             writes.append(arguments)
-            remote.update(draft=False, immutable=True)
+            client.publish(remote)
 
         with (
             patch.dict(os.environ, CONTEXT),

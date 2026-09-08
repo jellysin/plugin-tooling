@@ -195,21 +195,31 @@ def merge_manifest(current, releases):
     return validate_manifest(merged)
 
 
-def release_assets(release, repo, tag):
+def release_assets(release, repo, tag, *, authenticated_draft=False):
+    require(not authenticated_draft or release.get("draft") is True, "Authenticated draft validation requires a draft")
     assets = release.get("assets")
     require(isinstance(assets, list) and len(assets) <= MAX_FILES, "Invalid release assets")
     result = {}
     for asset in assets:
+        require(isinstance(asset, dict), "Invalid release asset")
         name = filename(asset.get("name"))
         require(name not in result, "Duplicate release asset")
         require(
             asset.get("state") == "uploaded" and type(asset.get("size")) is int and 0 < asset["size"] <= MAX_ASSET,
             "Incomplete or oversized asset",
         )
-        require(
-            asset.get("browser_download_url") == f"https://github.com/{repo}/releases/download/{tag}/{name}",
-            "Unapproved release asset URL",
-        )
+        if authenticated_draft:
+            identity = asset.get("id")
+            require(type(identity) is int and identity > 0, "Invalid draft asset ID")
+            require(
+                asset.get("url") == f"https://api.github.com/repos/{repo}/releases/assets/{identity}",
+                "Unapproved draft asset API URL",
+            )
+        else:
+            require(
+                asset.get("browser_download_url") == f"https://github.com/{repo}/releases/download/{tag}/{name}",
+                "Unapproved release asset URL",
+            )
         result[name] = asset
     return result
 

@@ -6,8 +6,8 @@ All source here is build-time tooling. Installed Jellyfin plugins never import i
 - Keep production code Python standard-library-only. Pin development tools exactly with hashes.
 - Every network response, asset, page count and external process needs a finite bound.
 - Allow only reviewed HTTPS hosts. Never forward the API token to download redirects.
-- Treat release metadata and ZIP contents as untrusted; validate before writing the catalog.
-- Preserve published artifact bytes and catalog versions. Never add upload replacement flags.
+- Treat release metadata and ZIP contents as untrusted; validate before writing the plugin repository.
+- Preserve published artifact bytes and plugin repository versions. Never add upload replacement flags.
 - Verify provenance against the approved repository, workflow, source commit and tag.
 - Limit functions to 120 lines, 60 statements and cyclomatic complexity 10.
 - Test recovery, failure atomicity, and independent plugin identities.

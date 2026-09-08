@@ -1,14 +1,14 @@
-name: Reconcile Jellyfin catalog
-description: Verify allowlisted public release attestations and add immutable catalog entries.
+name: Reconcile Jellyfin plugin repository
+description: Verify allowlisted public release attestations and add immutable plugin repository entries.
 inputs:
   manifest:
-    description: Existing catalog array file.
+    description: Existing plugin repository manifest file.
     default: manifest.json
   allowlist:
     description: Reviewed list of plugin GUIDs and source repositories.
     default: plugins.json
   token:
-    description: Catalog repository's built-in GITHUB_TOKEN, used for API reads only.
+    description: Plugin repository's built-in GITHUB_TOKEN, used for API reads only.
     required: true
 runs:
   using: composite

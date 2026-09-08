@@ -71,11 +71,9 @@ class CatalogTests(Workspace):
         release, _ = self.plugin()
         client = Mock()
         client.api.return_value = [{"tag_name": f"v1.0.{index}", "immutable": True} for index in range(21)]
-        with (
-            patch("jellysin_tooling.catalog.verified_release", return_value=release),
-            self.assertRaisesRegex(ValidationError, "20"),
-        ):
+        with patch("jellysin_tooling.catalog.verified_release", return_value=release) as verify:
             collect(client, [approved()], [])
+        self.assertEqual(20, verify.call_count)
         client.api.return_value = [{"draft": True}] * 100
         with self.assertRaisesRegex(ValidationError, "1000"):
             collect(client, [approved()], [])

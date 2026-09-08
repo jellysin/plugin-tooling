@@ -259,9 +259,8 @@ def collect(client, approved_plugins, current, verifier=verify_attestation):
                 require(remote.get("immutable") is True, "Source release must have GitHub immutability enabled")
                 if (approved["guid"], version) in known:
                     continue
-                require(
-                    len(pending) < 20, "More than 20 unpublished catalog releases; process an explicit reviewed batch"
-                )
+                if len(pending) == 20:
+                    return merge_manifest(current, pending)
                 pending.append(verified_release(client, approved, remote, verifier))
                 known.add((approved["guid"], version))
             if len(releases) < 100:

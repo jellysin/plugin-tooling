@@ -47,7 +47,8 @@ GitHub-hosted runner. Metadata, checksums, ZIP entries and SBOM format are valid
 before the catalog changes. Existing catalog versions are preserved.
 
 Scans are bounded to 32 repositories, 1,000 releases per repository, and 20 new
-versions per run. Drafts and prereleases are skipped. Failed or over-limit scans
+versions per batch; remaining releases follow after that catalog PR merges.
+Drafts and prereleases are skipped. Failed or over-limit scans
 leave the catalog unchanged; resolve the source problem and rerun. Already listed
 versions are not re-downloaded each poll; source repositories must enable immutable
 releases. Catalog changes go through PRs.

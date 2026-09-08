@@ -1,9 +1,11 @@
 """Two independent plugins ensure tooling has no Last.fm-specific assumptions."""
 
 import copy
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from jellysin_tooling.package import build
 
@@ -36,6 +38,9 @@ def approved(info=FIRST):
 
 class Workspace(unittest.TestCase):
     def setUp(self):
+        environment = patch.dict(os.environ, {"GITHUB_ACTIONS": "false", "GITHUB_OUTPUT": ""})
+        environment.start()
+        self.addCleanup(environment.stop)
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)

@@ -30,10 +30,10 @@ class PublicationTests(Workspace):
 
         def runner(arguments):
             writes.append(arguments)
-            self.assertEqual(SECOND["repository"], arguments[arguments.index("--repo") + 1])
-            if "upload" in arguments:
+            self.assertIn(f"repos/{SECOND['repository']}/releases/{remote['id']}", arguments[4])
+            if "POST" in arguments:
                 remote["assets"].append(missing)
-            elif "edit" in arguments:
+            elif "PATCH" in arguments:
                 remote.update(draft=False, immutable=True)
 
         with patch("jellysin_tooling.release.exact_tag", return_value=COMMIT):
@@ -41,7 +41,7 @@ class PublicationTests(Workspace):
                 client, output, SECOND["repository"], second["tag"], ".github/workflows/release.yml", Mock(), runner
             )
             self.assertEqual(second, result)
-            self.assertEqual(["upload", "edit"], [arguments[2] for arguments in writes])
+            self.assertEqual(["POST", "PATCH"], [arguments[3] for arguments in writes])
             publish(
                 client, output, SECOND["repository"], second["tag"], ".github/workflows/release.yml", Mock(), runner
             )
@@ -64,19 +64,17 @@ class PublicationTests(Workspace):
             writes.append(args)
             if "DELETE" in args:
                 remote["assets"] = [asset for asset in remote["assets"] if asset["id"] != complete["id"]]
-            elif "upload" in args:
+            elif "POST" in args:
                 remote["assets"].append(complete)
-            elif "edit" in args:
+            elif "PATCH" in args:
                 remote.update(draft=False, immutable=True)
 
         with patch("jellysin_tooling.release.exact_tag", return_value=COMMIT):
             publish(
                 client, output, FIRST["repository"], release["tag"], ".github/workflows/release.yml", Mock(), runner
             )
-        self.assertEqual(["api", "release", "release"], [args[1] for args in writes])
-        self.assertEqual("DELETE", writes[0][3])
-        self.assertIn("upload", writes[1])
-        self.assertIn("--draft=false", writes[2])
+        self.assertEqual(["DELETE", "POST", "PATCH"], [args[3] for args in writes])
+        self.assertIn("draft=false", writes[2])
 
     def test_starter_recovery_refuses_published_nonempty_unexpected_or_changed_assets(self):
         release, output = self.plugin()
@@ -102,7 +100,7 @@ class PublicationTests(Workspace):
         original["assets"][0]["state"] = "uploaded"
         runner = Mock()
         with self.assertRaises(ValidationError):
-            remove_draft_starters(client, pending, FIRST["repository"], release["tag"], runner)
+            remove_draft_starters(client, pending, FIRST["repository"], release["tag"], original["id"], runner)
         runner.assert_not_called()
 
     def test_existing_different_uploaded_bytes_prevent_starter_deletion(self):
@@ -149,19 +147,19 @@ class PublicationTests(Workspace):
 
         def runner(args):
             writes.append(args)
-            if "upload" in args:
+            if "POST" in args:
                 remote["assets"].append(missing)
-            if "edit" in args:
+            if "PATCH" in args:
                 remote.update(draft=False, immutable=True)
 
         with patch("jellysin_tooling.release.exact_tag", return_value=COMMIT):
             publish(
                 client, output, FIRST["repository"], release["tag"], ".github/workflows/release.yml", Mock(), runner
             )
-        self.assertEqual(["upload", "edit"], [args[2] for args in writes])
+        self.assertEqual(["POST", "PATCH"], [args[3] for args in writes])
         self.assertIn(str(output / missing["name"]), writes[0])
         self.assertNotIn("--clobber", writes[0])
-        self.assertIn("--draft=false", writes[-1])
+        self.assertIn("draft=false", writes[-1])
 
     def test_existing_mismatch_prevents_all_uploads(self):
         release, output = self.plugin()

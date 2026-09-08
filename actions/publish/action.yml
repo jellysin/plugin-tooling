@@ -10,6 +10,9 @@ inputs:
   token:
     description: Calling repository's built-in GITHUB_TOKEN.
     required: true
+  verified-tag-recovery:
+    description: Recover an already attested exact tag from the approved main recovery workflow.
+    default: 'false'
 runs:
   using: composite
   steps:
@@ -22,4 +25,12 @@ runs:
         RELEASE_DIRECTORY: ${{ inputs.directory }}
         RELEASE_TAG: ${{ inputs.tag }}
         GH_TOKEN: ${{ inputs.token }}
-      run: python "$TOOL_ROOT/tools.py" publish --directory "$RELEASE_DIRECTORY" --tag "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY"
+        VERIFIED_TAG_RECOVERY: ${{ inputs.verified-tag-recovery }}
+      run: |
+        recovery=()
+        case "$VERIFIED_TAG_RECOVERY" in
+          true) recovery=(--verified-tag-recovery) ;;
+          false) ;;
+          *) echo "Invalid verified-tag-recovery input" >&2; exit 1 ;;
+        esac
+        python "$TOOL_ROOT/tools.py" publish --directory "$RELEASE_DIRECTORY" --tag "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" "${recovery[@]}"

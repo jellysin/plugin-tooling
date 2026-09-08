@@ -89,6 +89,21 @@ class CommandLineTests(Workspace):
         with patch("jellysin_tooling.release.publish") as publish:
             run(parser().parse_args(["publish", "--repo", FIRST["repository"], "--tag", "v1.0.0"]))
         self.assertEqual(FIRST["repository"], publish.call_args.args[2])
+        self.assertFalse(publish.call_args.kwargs["verified_tag_recovery"])
+        with patch("jellysin_tooling.release.publish") as publish:
+            run(
+                parser().parse_args(
+                    [
+                        "publish",
+                        "--repo",
+                        FIRST["repository"],
+                        "--tag",
+                        "v1.0.0",
+                        "--verified-tag-recovery",
+                    ]
+                )
+            )
+        self.assertTrue(publish.call_args.kwargs["verified_tag_recovery"])
 
     def test_invalid_input_exits_nonzero_without_dumping_contents(self):
         stderr = io.StringIO()

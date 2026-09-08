@@ -100,5 +100,21 @@ its size is exactly zero, existing uploaded bytes match, and a fresh API read st
 identifies the same draft asset. Uploaded or published assets are never replaced.
 See GitHub's [upload failure behavior](https://docs.github.com/en/rest/releases/assets#upload-a-release-asset).
 
+The publisher discovers drafts through the authenticated
+[release list](https://docs.github.com/en/rest/releases/releases#list-releases):
+GitHub's tag endpoint returns published releases only. It scans at most 1,000
+entries, requires one exact tag match, and pins subsequent reads, uploads and
+publication to that release's numeric ID. Missing, ambiguous or changed identities
+stop publication without selecting a replacement draft.
+
+An already attested tag can opt into `verified-tag-recovery: 'true'` on the publish
+Action, or `--verified-tag-recovery` on the CLI. This requires a manually dispatched
+`.github/workflows/recover-release.yml` on the same repository's `main`, with matching
+GitHub workflow/source SHAs. The original tag must be an ancestor of both that
+workflow commit and fetched `origin/main`. Recovery verifies all four original
+`release.yml` attestations against the original tag and commit before any mutation.
+It does not create attestations, move tags, or relax artifact and immutability
+checks. Normal publication still requires the original tag workflow context.
+
 EUPL-1.2 covers this source. License text comes from the SPDX license list;
 third-party Actions retain their own licenses. See CONTRIBUTING.md for validation.

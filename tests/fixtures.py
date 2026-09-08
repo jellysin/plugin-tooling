@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from jellysin_tooling.common import ValidationError
 from jellysin_tooling.package import build
 
 FIRST = {
@@ -56,6 +57,7 @@ class Workspace(unittest.TestCase):
 
 class FakeGitHub:
     def __init__(self):
+        self.token = "synthetic-fixture-token"
         self.releases = {}
         self.downloads = {}
         self.assets = {}
@@ -63,7 +65,16 @@ class FakeGitHub:
 
     def add(self, info, release, output, draft=False):
         repo = info["repository"]
-        remote = {"tag_name": release["tag"], "draft": draft, "prerelease": False, "immutable": not draft, "assets": []}
+        identity = sum(len(values) for values in self.releases.values()) + 1
+        remote = {
+            "id": identity,
+            "url": f"https://api.github.com/repos/{repo}/releases/{identity}",
+            "tag_name": release["tag"],
+            "draft": draft,
+            "prerelease": False,
+            "immutable": not draft,
+            "assets": [],
+        }
         for index, file in enumerate(sorted(output.iterdir()), 1):
             url = f"https://github.com/{repo}/releases/download/{release['tag']}/{file.name}"
             contents = file.read_bytes()
@@ -85,12 +96,27 @@ class FakeGitHub:
         self.calls.append(path)
         for repo, releases in self.releases.items():
             if path.startswith(f"repos/{repo}/releases?"):
-                return releases
+                page = int(path.rsplit("page=", 1)[1])
+                return releases[(page - 1) * 100 : page * 100]
             if path.startswith(f"repos/{repo}/releases/tags/"):
-                return releases[0]
+                tag = path.rsplit("/", 1)[1]
+                matches = [release for release in releases if release["tag_name"] == tag and not release["draft"]]
+                if not matches:
+                    self.not_found()
+                return matches[0]
+            if path.startswith(f"repos/{repo}/releases/"):
+                identity = int(path.rsplit("/", 1)[1])
+                matches = [release for release in releases if release["id"] == identity]
+                if not matches:
+                    self.not_found()
+                return matches[0]
             if path.startswith(f"repos/{repo}/git/ref/"):
                 return {"object": {"type": "commit", "sha": COMMIT}}
         raise AssertionError("Unexpected API call")
+
+    @staticmethod
+    def not_found():
+        raise ValidationError("GitHub request failed with HTTP 404")
 
     def download(self, url):
         self.calls.append(url)

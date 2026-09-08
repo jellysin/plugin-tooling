@@ -1,4 +1,4 @@
-name: Release automation
+name: Prepare release PR
 on:
   push:
     branches: [main]
@@ -16,5 +16,3 @@ jobs:
       pull-requests: write
       actions: write
     uses: ./.github/workflows/release-please.yml
-    with:
-      publish: false

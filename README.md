@@ -66,13 +66,22 @@ Consume `actions/package`, `actions/publish`, or `actions/catalog` at a reviewed
 full commit SHA. Actions use their own downloaded directory; callers do not copy
 scripts or check out a mutable tooling branch.
 
+The reusable `.github/workflows/release-please.yml` collects conventional commits
+into release PRs, including proposed versions and changelogs. It sets
+`skip-github-release: true`: main merges can prepare PRs but never create tags,
+GitHub drafts or published releases. Merging a release PR updates files only.
+It explicitly dispatches the caller's `ci.yml` for at most 20 returned release PRs,
+with a 60-second timeout per dispatch. It exposes no publication inputs or tag
+output and never dispatches a publication workflow.
+
 The package action accepts `publish-directory`, `metadata-path`, `version-path`,
 `output-directory`, optional exact `tag` and the dependency inputs above; it outputs
 `archive` and `directory`.
-Attest **all four artifacts** using `actions/attest` in the plugin's tag-dispatched
+For a separately authorized publication, attest **all four artifacts** using
+`actions/attest` in the plugin's tag-dispatched
 `.github/workflows/release.yml`, then call `actions/publish` with `directory`, `tag`
-and the built-in `token`. Shared release automation explicitly dispatches bot PR CI
-and exact-tag publication. GitHub currently requires maintainer approval of
+and the built-in `token`. An existing draft and the exact tag are prerequisites;
+release PR preparation creates neither. GitHub currently requires maintainer approval of
 `GITHUB_TOKEN`-created PR workflows, including later updates; dispatching CI does
 not clear that separate approval gate. This is the documented
 [June 11, 2026 GitHub behavior](https://github.blog/changelog/2026-06-11-bot-created-pull-requests-can-run-workflows-if-approved/).

@@ -24,14 +24,18 @@ def check_repository(root):
                 )
                 require(not target.endswith("@" + "0" * 40), "Unresolved action pin")
             require("pull_request_target:" not in contents, "Privileged PR workflow needs explicit security review")
-    for path in (root / "jellysin_tooling").glob("*.py"):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                require(
-                    node.end_lineno - node.lineno + 1 <= 120, f"Function exceeds 120 lines: {path.name}:{node.name}"
-                )
-                require(
-                    sum(isinstance(child, ast.stmt) for child in ast.walk(node)) <= 60,
-                    f"Function exceeds 60 statements: {path.name}:{node.name}",
-                )
+    for folder in ("jellysin_tooling", "tools"):
+        # Only conventional source files; do not traverse generated bin/obj trees.
+        for path in (root / folder).glob("*.py"):
+            check_python_functions(path)
+
+
+def check_python_functions(path):
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            require(node.end_lineno - node.lineno + 1 <= 120, f"Function exceeds 120 lines: {path.name}:{node.name}")
+            require(
+                sum(isinstance(child, ast.stmt) for child in ast.walk(node)) <= 60,
+                f"Function exceeds 60 statements: {path.name}:{node.name}",
+            )

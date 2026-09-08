@@ -38,3 +38,21 @@ class PolicyTests(Workspace):
         (source / "long.py").write_text("def too_complex():\n" + "    pass\n" * 61)
         with self.assertRaisesRegex(ValidationError, "60"):
             check_repository(self.root)
+
+    def test_sizes_apply_to_top_level_repository_helpers(self):
+        self.prepare().write_text("pull_request:\n")
+        source = self.root / "tools"
+        source.mkdir()
+        helper = source / "helper.py"
+        helper.write_text("async def helper():\n    return True\n")
+        # A .NET helper project may have large generated files; never recurse into it.
+        generated = source / "CodePolicy" / "obj"
+        generated.mkdir(parents=True)
+        (generated / "generated.py").write_text("def oversized():\n" + "    pass\n" * 121)
+        check_repository(self.root)
+        helper.write_text("async def too_long():\n" + "\n" * 119 + "    return True\n")
+        with self.assertRaisesRegex(ValidationError, "120 lines: helper.py:too_long"):
+            check_repository(self.root)
+        helper.write_text("async def too_complex():\n" + "    pass\n" * 61)
+        with self.assertRaisesRegex(ValidationError, "60 statements: helper.py:too_complex"):
+            check_repository(self.root)

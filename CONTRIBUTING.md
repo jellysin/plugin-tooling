@@ -33,12 +33,20 @@ Raise the supported minimum deliberately when production code requires it.
 
 ## Release contract
 
-Release-please owns versions, tags and changelogs. Tags use stable three-part SemVer.
-Consumers pin Actions or reusable workflows to a full commit SHA and annotate the
-release version for Renovate.
+Release-please collects conventional commits in release PRs and maintains proposed
+versions and changelogs. The shared workflow sets `skip-github-release: true` and
+dispatches only the caller's `ci.yml` for returned release PR branches. A main merge
+can open or update a release PR; it cannot create a tag, draft or published release.
+Merging the release PR updates version files and changelogs without publication.
+The reusable workflow has no publication inputs or tag output.
 
-Plugin release-please creates a draft and forces tag creation, then explicitly
-dispatches `release.yml` **on the tag ref**. Checking out a tag from a main-triggered
+Publication is a separate, explicitly authorized operation. Tags use stable
+three-part SemVer. Consumers pin Actions or reusable workflows to a full commit SHA
+and annotate released versions for Renovate. The shared PR workflow does not
+create those tags or dispatch publication workflows.
+
+When publication is authorized, the publisher requires `release.yml` to run **on
+the exact tag ref** with an existing draft. Checking out a tag from a main-triggered
 workflow does not change the OIDC source identity. Publication validates the exact
 tag commit, attests every artifact, verifies existing bytes, uploads missing draft
 assets, rechecks the complete draft, then publishes. Retry on the same tag. A
@@ -59,7 +67,7 @@ and numeric release identity. A vanished draft requires investigation, not a
 replacement selected by tag.
 
 Use only the calling repository's GITHUB_TOKEN. Plugin repository updates run in
-`jellysin/repo` and opens its own PR. No cross-repository write token, release
+`jellysin/repo`, which opens its own PR. No cross-repository write token, release
 App, runtime package, or installed plugin dependency is required.
 
 Workflow defaults are read-only. Writes belong to the narrow jobs that need them.

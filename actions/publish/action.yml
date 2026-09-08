@@ -1,5 +1,5 @@
 name: Publish verified release
-description: Reconcile a release-please draft without replacing any existing bytes, then publish.
+description: Reconcile an existing GitHub draft without replacing any existing bytes, then publish.
 inputs:
   directory:
     description: Directory produced by the package action and attested by the caller workflow.

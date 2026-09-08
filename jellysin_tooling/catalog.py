@@ -6,6 +6,7 @@ import zipfile
 from pathlib import Path
 from uuid import UUID
 
+from . import inventory, spdx
 from .common import (
     MAX_ASSET,
     MAX_FILES,
@@ -58,6 +59,8 @@ def validate_release(value, approved, tag):
     )
     require(isinstance(value.get("commit"), str) and SHA.fullmatch(value["commit"]), "Invalid source commit")
     require(timestamp(value.get("timestamp")) == value["timestamp"], "Noncanonical release timestamp")
+    if "dependencyInventory" in value:
+        inventory.validate(value["dependencyInventory"])
     asset = value.get("archive")
     require(
         isinstance(asset, dict) and asset.keys() == {"name", "url", "sha256", "md5", "size"}, "Invalid archive metadata"
@@ -99,7 +102,7 @@ def validate_archive(data, release):
                     "Unexpected archive mode or compression",
                 )
                 require(not entry.flag_bits & 1 and entry.file_size > 0, "Encrypted or empty archive member")
-                archive.read(entry)  # CRC and actual uncompressed length validation; never extract.
+            return {entry.filename: archive.read(entry) for entry in entries}  # Validate CRC; never extract.
     except (zipfile.BadZipFile, RuntimeError) as exc:
         raise ValueError("Invalid ZIP archive") from exc
 
@@ -230,13 +233,13 @@ def verified_release(client, approved, remote, verifier=verify_attestation):
             path = Path(temporary) / name
             path.write_bytes(data)
             verifier(path, repo, approved["signerWorkflow"], release["commit"], tag)
-        validate_archive(files[release["archive"]["name"]], release)
+        members = validate_archive(files[release["archive"]["name"]], release)
         expected = "".join(
             f"{digest(data)}  {name}\n" for name, data in sorted(files.items()) if name != "checksums.txt"
         ).encode()
         require(files["checksums.txt"] == expected, "Release checksum manifest mismatch")
         document = decode_json(files["sbom.spdx.json"])
-        require(document.get("spdxVersion") == "SPDX-2.3", "Unsupported SBOM format")
+        spdx.validate(document, release, members)
     return release
 
 

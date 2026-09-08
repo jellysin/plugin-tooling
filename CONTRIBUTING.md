@@ -43,6 +43,8 @@ workflow does not change the OIDC source identity. Publication validates the exa
 tag commit, attests every artifact, verifies existing bytes, uploads missing draft
 assets, rechecks the complete draft, then publishes. Retry on the same tag. A
 mismatch needs a new version; an incomplete published release is never repaired.
+Only expected zero-byte `starter` assets in a freshly revalidated draft may be
+deleted during failed-upload recovery. A changed or uploaded asset stops recovery.
 
 Use only the calling repository's GITHUB_TOKEN. Catalog publication runs in the
 catalog repository and opens its own PR. No cross-repository write token, release
@@ -51,3 +53,6 @@ App, runtime package, or installed plugin dependency is required.
 Workflow defaults are read-only. Writes belong to the narrow jobs that need them.
 Bot CI explicitly dispatches the PR branch. No workflow assumes a token-created
 event will recursively trigger another workflow.
+GitHub may also create an approval-required PR run for each bot-authored update.
+Review the current PR and approve that real run before merging; a successful
+dispatch does not replace its approval. Do not fabricate checks or weaken protection.

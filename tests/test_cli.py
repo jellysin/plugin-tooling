@@ -6,11 +6,42 @@ import os
 from unittest.mock import patch
 
 from jellysin_tooling.cli import main, parser, run
-from jellysin_tooling.common import json_bytes
+from jellysin_tooling.common import ValidationError, json_bytes, read_json
 from tests.fixtures import COMMIT, CREATED, FIRST, Workspace, approved
+from tests.inventory_fixtures import restore_files
 
 
 class CommandLineTests(Workspace):
+    def test_package_interface_accepts_complete_inventory_and_rejects_partial_inputs(self):
+        _, output = self.plugin()
+        paths, _ = restore_files(self.root)
+        descriptor = self.root / "plugin.json"
+        descriptor.write_bytes(json_bytes(FIRST))
+        version = self.root / "version.txt"
+        version.write_text("1.0.0\n")
+        destination = self.root / "inventory-dist"
+        arguments = [
+            "package",
+            "--publish-directory",
+            str(output.parent / "publish"),
+            "--metadata-path",
+            str(descriptor),
+            "--version-path",
+            str(version),
+            "--output-directory",
+            str(destination),
+        ]
+        options = ("--nuget-lock-path", "--nuget-assets-path", "--runtime-dependencies-path", "--global-json-path")
+        for option, path in zip(options, paths, strict=True):
+            arguments.extend([option, str(path)])
+        with patch("jellysin_tooling.cli.command", side_effect=[COMMIT, CREATED]):
+            run(parser().parse_args(arguments))
+        self.assertEqual(2, len(read_json(destination / "release.json")["dependencyInventory"]["packages"]))
+        args = parser().parse_args(arguments)
+        args.nuget_assets_path = None
+        with patch("jellysin_tooling.cli.command", side_effect=[COMMIT, CREATED]), self.assertRaises(ValidationError):
+            run(args)
+
     def test_package_interface_and_github_outputs(self):
         _, output = self.plugin()
         descriptor = self.root / "plugin.json"

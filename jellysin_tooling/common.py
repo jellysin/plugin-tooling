@@ -106,7 +106,7 @@ def atomic_write(path, data):
 
 
 def digest(data, algorithm="sha256"):
-    return hashlib.new(algorithm, data, usedforsecurity=algorithm != "md5").hexdigest()
+    return hashlib.new(algorithm, data, usedforsecurity=algorithm not in ("md5", "sha1")).hexdigest()
 
 
 def metadata(value):

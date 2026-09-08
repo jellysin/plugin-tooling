@@ -5,7 +5,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import catalog, package, policy, release
+from . import catalog, inventory, package, policy, release
 from .common import ValidationError, read_json, require
 from .github import GitHub, command
 
@@ -19,6 +19,10 @@ def parser():
     build.add_argument("--version-path", default="version.txt")
     build.add_argument("--output-directory", default="dist")
     build.add_argument("--tag")
+    build.add_argument("--nuget-lock-path")
+    build.add_argument("--nuget-assets-path")
+    build.add_argument("--runtime-dependencies-path")
+    build.add_argument("--global-json-path", default="global.json")
     publish = commands.add_parser("publish")
     publish.add_argument("--directory", default="dist")
     publish.add_argument("--repo", required=True)
@@ -44,6 +48,11 @@ def run(arguments):
         created = command(["git", "show", "-s", "--format=%cI", commit])
         version = Path(arguments.version_path).read_text(encoding="utf-8").strip()
         require(not arguments.tag or arguments.tag == "v" + version, "Tag does not match version.txt")
+        inventory_paths = (arguments.nuget_lock_path, arguments.nuget_assets_path, arguments.runtime_dependencies_path)
+        require(all(inventory_paths) or not any(inventory_paths), "Provide all three dependency inventory inputs")
+        dependencies = (
+            inventory.from_restore(*inventory_paths, arguments.global_json_path) if all(inventory_paths) else None
+        )
         result = package.build(
             arguments.publish_directory,
             read_json(arguments.metadata_path),
@@ -51,6 +60,7 @@ def run(arguments):
             commit,
             created,
             arguments.output_directory,
+            dependencies,
         )
         output = os.environ.get("GITHUB_OUTPUT")
         if output:

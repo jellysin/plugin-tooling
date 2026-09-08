@@ -1,0 +1,40 @@
+"""Policy gates prevent accidental unpinned Actions and unreviewable functions."""
+
+from jellysin_tooling.common import ValidationError
+from jellysin_tooling.policy import check_repository
+from tests.fixtures import Workspace
+
+
+class PolicyTests(Workspace):
+    def prepare(self):
+        for name in ("LICENSE", "README.md", "CONTRIBUTING.md", "AGENTS.md", "SECURITY.md", "renovate.json"):
+            (self.root / name).write_text("{}" if name.endswith("json") else "Fixture\n")
+        workflows = self.root / ".github" / "workflows"
+        workflows.mkdir(parents=True)
+        return workflows / "ci.yml"
+
+    def test_requires_documents_and_immutable_action_pins(self):
+        with self.assertRaises(ValidationError):
+            check_repository(self.root)
+        workflow = self.prepare()
+        for target in ("actions/checkout@main", "actions/checkout@" + "0" * 40):
+            workflow.write_text("- uses: " + target + "\n")
+            with self.subTest(target=target), self.assertRaises(ValidationError):
+                check_repository(self.root)
+        workflow.write_text("- uses: actions/checkout@" + "a" * 40 + "\n- uses: ./local\n")
+        check_repository(self.root)
+
+    def test_function_and_privileged_event_limits(self):
+        workflow = self.prepare()
+        workflow.write_text("pull_request_target:\n")
+        with self.assertRaises(ValidationError):
+            check_repository(self.root)
+        workflow.write_text("pull_request:\n")
+        source = self.root / "jellysin_tooling"
+        source.mkdir()
+        (source / "long.py").write_text("def too_large():\n" + "    pass\n" * 121)
+        with self.assertRaisesRegex(ValidationError, "120"):
+            check_repository(self.root)
+        (source / "long.py").write_text("def too_complex():\n" + "    pass\n" * 61)
+        with self.assertRaisesRegex(ValidationError, "60"):
+            check_repository(self.root)

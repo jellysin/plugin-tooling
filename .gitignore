@@ -1,0 +1,9 @@
+build/
+dist/
+__pycache__/
+*.py[cod]
+.venv/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/

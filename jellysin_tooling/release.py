@@ -116,7 +116,7 @@ def local_artifacts(directory, release):
 
 
 def reconcile_assets(client, remote, files, repo, tag):
-    assets = release_assets(remote, repo, tag)
+    assets = release_assets(remote, repo, tag, authenticated_draft=remote.get("draft") is True)
     require(assets.keys() <= files.keys(), "Unexpected assets on release")
     missing = []
     for name, data in sorted(files.items()):
@@ -146,7 +146,9 @@ def draft_starters(remote, files, repo, tag):
             "Unexpected incomplete draft asset",
         )
         require(type(asset.get("id")) is int and asset["id"] > 0, "Invalid incomplete asset ID")
-        release_assets({"assets": [{**asset, "state": "uploaded", "size": 1}]}, repo, tag)
+        release_assets(
+            {**remote, "assets": [{**asset, "state": "uploaded", "size": 1}]}, repo, tag, authenticated_draft=True
+        )
         pending.append(asset)
     require(len({asset["name"] for asset in assets}) == len(assets), "Duplicate release asset")
     return {**remote, "assets": uploaded}, pending

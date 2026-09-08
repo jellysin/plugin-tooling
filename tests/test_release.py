@@ -4,12 +4,120 @@ import copy
 import os
 from unittest.mock import Mock, patch
 
+from jellysin_tooling.catalog import collect
 from jellysin_tooling.common import ValidationError
-from jellysin_tooling.release import exact_tag, local_artifacts, publish, reconcile_assets, remote_tag
-from tests.fixtures import COMMIT, FIRST, FakeGitHub, Workspace
+from jellysin_tooling.release import (
+    draft_starters,
+    exact_tag,
+    local_artifacts,
+    publish,
+    reconcile_assets,
+    remote_tag,
+    remove_draft_starters,
+)
+from tests.fixtures import COMMIT, FIRST, SECOND, FakeGitHub, Workspace, approved
 
 
 class PublicationTests(Workspace):
+    def test_second_plugin_draft_publication_retry_and_catalog_keep_its_own_identity(self):
+        first, first_output = self.plugin()
+        second, output = self.plugin(SECOND, "2.3.4", b"MZindependent cinema fixture")
+        client = FakeGitHub()
+        client.add(FIRST, first, first_output)
+        remote = client.add(SECOND, second, output, draft=True)
+        missing = remote["assets"].pop()
+        writes = []
+
+        def runner(arguments):
+            writes.append(arguments)
+            self.assertEqual(SECOND["repository"], arguments[arguments.index("--repo") + 1])
+            if "upload" in arguments:
+                remote["assets"].append(missing)
+            elif "edit" in arguments:
+                remote.update(draft=False, immutable=True)
+
+        with patch("jellysin_tooling.release.exact_tag", return_value=COMMIT):
+            result = publish(
+                client, output, SECOND["repository"], second["tag"], ".github/workflows/release.yml", Mock(), runner
+            )
+            self.assertEqual(second, result)
+            self.assertEqual(["upload", "edit"], [arguments[2] for arguments in writes])
+            publish(
+                client, output, SECOND["repository"], second["tag"], ".github/workflows/release.yml", Mock(), runner
+            )
+            self.assertEqual(2, len(writes))
+        catalog = collect(client, [approved(FIRST), approved(SECOND)], [], Mock())
+        cinema = next(plugin for plugin in catalog if plugin["guid"] == SECOND["guid"])
+        self.assertEqual("2.3.4.0", cinema["versions"][0]["version"])
+        self.assertEqual(second["archive"]["url"], cinema["versions"][0]["sourceUrl"])
+        self.assertEqual({FIRST["guid"], SECOND["guid"]}, {plugin["guid"] for plugin in catalog})
+
+    def test_failed_upload_starter_is_removed_only_from_verified_draft_then_resumed(self):
+        release, output = self.plugin()
+        client = FakeGitHub()
+        remote = client.add(FIRST, release, output, draft=True)
+        complete = copy.deepcopy(remote["assets"][0])
+        remote["assets"][0].update(state="starter", size=0)
+        writes = []
+
+        def runner(args):
+            writes.append(args)
+            if "DELETE" in args:
+                remote["assets"] = [asset for asset in remote["assets"] if asset["id"] != complete["id"]]
+            elif "upload" in args:
+                remote["assets"].append(complete)
+            elif "edit" in args:
+                remote.update(draft=False, immutable=True)
+
+        with patch("jellysin_tooling.release.exact_tag", return_value=COMMIT):
+            publish(
+                client, output, FIRST["repository"], release["tag"], ".github/workflows/release.yml", Mock(), runner
+            )
+        self.assertEqual(["api", "release", "release"], [args[1] for args in writes])
+        self.assertEqual("DELETE", writes[0][3])
+        self.assertIn("upload", writes[1])
+        self.assertIn("--draft=false", writes[2])
+
+    def test_starter_recovery_refuses_published_nonempty_unexpected_or_changed_assets(self):
+        release, output = self.plugin()
+        files = local_artifacts(output, release)
+        client = FakeGitHub()
+        original = client.add(FIRST, release, output, draft=True)
+        original["assets"][0].update(state="starter", size=0)
+        for mutation in ("published", "nonempty", "unexpected", "id", "duplicate"):
+            remote = copy.deepcopy(original)
+            if mutation == "published":
+                remote["draft"] = False
+            elif mutation == "nonempty":
+                remote["assets"][0]["size"] = 1
+            elif mutation == "unexpected":
+                remote["assets"][0]["name"] = "unknown.dll"
+            elif mutation == "id":
+                remote["assets"][0]["id"] = False
+            else:
+                remote["assets"].append(remote["assets"][0])
+            with self.subTest(mutation=mutation), self.assertRaises(ValidationError):
+                draft_starters(remote, files, FIRST["repository"], release["tag"])
+        _, pending = draft_starters(copy.deepcopy(original), files, FIRST["repository"], release["tag"])
+        original["assets"][0]["state"] = "uploaded"
+        runner = Mock()
+        with self.assertRaises(ValidationError):
+            remove_draft_starters(client, pending, FIRST["repository"], release["tag"], runner)
+        runner.assert_not_called()
+
+    def test_existing_different_uploaded_bytes_prevent_starter_deletion(self):
+        release, output = self.plugin()
+        client = FakeGitHub()
+        remote = client.add(FIRST, release, output, draft=True)
+        remote["assets"][0].update(state="starter", size=0)
+        client.assets[FIRST["repository"], remote["assets"][1]["id"]] = b"different"
+        runner = Mock()
+        with patch("jellysin_tooling.release.exact_tag", return_value=COMMIT), self.assertRaises(ValidationError):
+            publish(
+                client, output, FIRST["repository"], release["tag"], ".github/workflows/release.yml", Mock(), runner
+            )
+        runner.assert_not_called()
+
     def test_complete_release_is_verified_without_writes(self):
         release, output = self.plugin()
         client = FakeGitHub()

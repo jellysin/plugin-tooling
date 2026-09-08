@@ -3,8 +3,9 @@
 import os
 from pathlib import Path
 
+from . import spdx
 from .catalog import release_assets, validate_archive, validate_release
-from .common import MAX_ASSET, SHA, digest, read_json, repository, require, semver
+from .common import MAX_ASSET, SHA, decode_json, digest, read_json, repository, require, semver
 from .github import command, verify_attestation
 
 
@@ -41,7 +42,8 @@ def local_artifacts(directory, release):
             "Missing or unsafe release artifact",
         )
         files[name] = path.read_bytes()
-    validate_archive(files[release["archive"]["name"]], release)
+    members = validate_archive(files[release["archive"]["name"]], release)
+    spdx.validate(decode_json(files["sbom.spdx.json"]), release, members)
     checksums = "".join(
         f"{digest(data)}  {name}\n" for name, data in sorted(files.items()) if name != "checksums.txt"
     ).encode()
@@ -64,6 +66,38 @@ def reconcile_assets(client, remote, files, repo, tag):
     return missing
 
 
+def draft_starters(remote, files, repo, tag):
+    assets = remote.get("assets")
+    require(isinstance(assets, list) and len(assets) <= 32, "Invalid release assets")
+    pending = []
+    uploaded = []
+    for asset in assets:
+        require(isinstance(asset, dict), "Invalid release asset")
+        if asset.get("state") != "starter":
+            uploaded.append(asset)
+            continue
+        require(remote.get("draft") is True, "Never remove a published release asset")
+        require(
+            asset.get("name") in files and type(asset.get("size")) is int and asset["size"] == 0,
+            "Unexpected incomplete draft asset",
+        )
+        require(type(asset.get("id")) is int and asset["id"] > 0, "Invalid incomplete asset ID")
+        release_assets({"assets": [{**asset, "state": "uploaded", "size": 1}]}, repo, tag)
+        pending.append(asset)
+    require(len({asset["name"] for asset in assets}) == len(assets), "Duplicate release asset")
+    return {**remote, "assets": uploaded}, pending
+
+
+def remove_draft_starters(client, pending, repo, tag, runner):
+    for asset in pending:
+        current = client.api(f"repos/{repo}/releases/tags/{tag}")
+        require(current.get("draft") is True, "Release is no longer a draft")
+        matches = [entry for entry in current.get("assets", []) if entry.get("id") == asset["id"]]
+        require(len(matches) == 1 and matches[0] == asset, "Incomplete draft asset changed before recovery")
+        # GitHub documents zero-byte starter assets after failed uploads as safe to delete.
+        runner(["gh", "api", "--method", "DELETE", f"repos/{repo}/releases/assets/{asset['id']}"])
+
+
 def publish(client, directory, repo, tag, workflow, verifier=verify_attestation, runner=command):
     repository(repo)
     require(workflow == ".github/workflows/release.yml", "Unapproved publisher workflow")
@@ -83,7 +117,9 @@ def publish(client, directory, repo, tag, workflow, verifier=verify_attestation,
         verifier(Path(directory) / name, repo, workflow, commit, tag)
     remote = client.api(f"repos/{repo}/releases/tags/{tag}")
     require(remote.get("tag_name") == tag and not remote.get("prerelease"), "Unexpected release state")
+    remote, pending = draft_starters(remote, files, repo, tag)
     missing = reconcile_assets(client, remote, files, repo, tag)
+    remove_draft_starters(client, pending, repo, tag, runner)
     for name in missing:
         runner(["gh", "release", "upload", tag, str(Path(directory) / name), "--repo", repo])
     refreshed = client.api(f"repos/{repo}/releases/tags/{tag}")

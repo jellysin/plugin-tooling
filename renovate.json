@@ -8,6 +8,12 @@
   "prConcurrentLimit": 5,
   "labels": ["dependencies"],
   "packageRules": [
+    {
+      "description": "Preserve supported Python runtimes while updating exact CI interpreter pins separately",
+      "matchManagers": ["pep621"],
+      "matchDepTypes": ["requires-python"],
+      "rangeStrategy": "widen"
+    },
     {"matchManagers": ["github-actions"], "groupName": "GitHub Actions"},
     {"matchUpdateTypes": ["major"], "groupName": null}
   ]

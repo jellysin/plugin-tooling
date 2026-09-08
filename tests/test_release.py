@@ -4,6 +4,7 @@ import copy
 import os
 from unittest.mock import Mock, patch
 
+from jellysin_tooling.catalog import collect
 from jellysin_tooling.common import ValidationError
 from jellysin_tooling.release import (
     draft_starters,
@@ -14,10 +15,43 @@ from jellysin_tooling.release import (
     remote_tag,
     remove_draft_starters,
 )
-from tests.fixtures import COMMIT, FIRST, FakeGitHub, Workspace
+from tests.fixtures import COMMIT, FIRST, SECOND, FakeGitHub, Workspace, approved
 
 
 class PublicationTests(Workspace):
+    def test_second_plugin_draft_publication_retry_and_catalog_keep_its_own_identity(self):
+        first, first_output = self.plugin()
+        second, output = self.plugin(SECOND, "2.3.4", b"MZindependent cinema fixture")
+        client = FakeGitHub()
+        client.add(FIRST, first, first_output)
+        remote = client.add(SECOND, second, output, draft=True)
+        missing = remote["assets"].pop()
+        writes = []
+
+        def runner(arguments):
+            writes.append(arguments)
+            self.assertEqual(SECOND["repository"], arguments[arguments.index("--repo") + 1])
+            if "upload" in arguments:
+                remote["assets"].append(missing)
+            elif "edit" in arguments:
+                remote.update(draft=False, immutable=True)
+
+        with patch("jellysin_tooling.release.exact_tag", return_value=COMMIT):
+            result = publish(
+                client, output, SECOND["repository"], second["tag"], ".github/workflows/release.yml", Mock(), runner
+            )
+            self.assertEqual(second, result)
+            self.assertEqual(["upload", "edit"], [arguments[2] for arguments in writes])
+            publish(
+                client, output, SECOND["repository"], second["tag"], ".github/workflows/release.yml", Mock(), runner
+            )
+            self.assertEqual(2, len(writes))
+        catalog = collect(client, [approved(FIRST), approved(SECOND)], [], Mock())
+        cinema = next(plugin for plugin in catalog if plugin["guid"] == SECOND["guid"])
+        self.assertEqual("2.3.4.0", cinema["versions"][0]["version"])
+        self.assertEqual(second["archive"]["url"], cinema["versions"][0]["sourceUrl"])
+        self.assertEqual({FIRST["guid"], SECOND["guid"]}, {plugin["guid"] for plugin in catalog})
+
     def test_failed_upload_starter_is_removed_only_from_verified_draft_then_resumed(self):
         release, output = self.plugin()
         client = FakeGitHub()

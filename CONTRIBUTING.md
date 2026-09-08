@@ -23,6 +23,14 @@ actionlint
 Coverage must reach 85%, including branches. Tests use two plugin identities and
 temporary directories; they do not publish releases. Record unavailable validation.
 
+`pyproject.toml` declares supported runtimes (`>=3.13`); `.python-version` pins the
+exact CI interpreter. Renovate's [PEP 621 manager](https://docs.renovatebot.com/modules/manager/pep621/#dependency-types)
+identifies the former as `requires-python`. Its scoped
+[`widen` strategy](https://docs.renovatebot.com/modules/versioning/pep440/#rangesconstraints)
+keeps that compatibility range rather than pinning it to a single Python patch.
+Exact CI interpreter and dependency updates remain enabled and require PR review.
+Raise the supported minimum deliberately when production code requires it.
+
 ## Release contract
 
 Release-please owns versions, tags and changelogs. Tags use stable three-part SemVer.

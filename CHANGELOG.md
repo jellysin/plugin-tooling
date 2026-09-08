@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.3](https://github.com/jellysin/plugin-tooling/compare/v1.0.2...v1.0.3) (2026-09-08)
+
+
+### Bug Fixes
+
+* validate draft assets by authenticated API identity ([#11](https://github.com/jellysin/plugin-tooling/issues/11)) ([bfe7e8f](https://github.com/jellysin/plugin-tooling/commit/bfe7e8f7151b614f78fcd49ec4da351483794bd6))
+
 ## [1.0.2](https://github.com/jellysin/plugin-tooling/compare/v1.0.1...v1.0.2) (2026-09-08)
 
 

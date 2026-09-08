@@ -6,7 +6,9 @@
     ".": {
       "package-name": "jellysin-plugin-tooling",
       "initial-version": "1.0.0",
-      "extra-files": ["pyproject.toml"]
+      "extra-files": [
+        {"type": "toml", "path": "pyproject.toml", "jsonpath": "$.project.version"}
+      ]
     }
   }
 }

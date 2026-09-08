@@ -1,0 +1,143 @@
+"""Interrupted upload recovery and exact-tag publication protections."""
+
+import copy
+import os
+from unittest.mock import Mock, patch
+
+from jellysin_tooling.common import ValidationError
+from jellysin_tooling.release import exact_tag, local_artifacts, publish, reconcile_assets, remote_tag
+from tests.fixtures import COMMIT, FIRST, FakeGitHub, Workspace
+
+
+class PublicationTests(Workspace):
+    def test_complete_release_is_verified_without_writes(self):
+        release, output = self.plugin()
+        client = FakeGitHub()
+        client.add(FIRST, release, output)
+        runner = Mock()
+        verifier = Mock()
+        with patch("jellysin_tooling.release.exact_tag", return_value=COMMIT):
+            self.assertEqual(
+                release,
+                publish(
+                    client,
+                    output,
+                    FIRST["repository"],
+                    release["tag"],
+                    ".github/workflows/release.yml",
+                    verifier,
+                    runner,
+                ),
+            )
+        runner.assert_not_called()
+        self.assertEqual(4, verifier.call_count)
+
+    def test_draft_resume_uploads_only_missing_bytes_and_publishes_after_verification(self):
+        release, output = self.plugin()
+        client = FakeGitHub()
+        remote = client.add(FIRST, release, output, draft=True)
+        missing = remote["assets"].pop()
+        writes = []
+
+        def runner(args):
+            writes.append(args)
+            if "upload" in args:
+                remote["assets"].append(missing)
+            if "edit" in args:
+                remote.update(draft=False, immutable=True)
+
+        with patch("jellysin_tooling.release.exact_tag", return_value=COMMIT):
+            publish(
+                client, output, FIRST["repository"], release["tag"], ".github/workflows/release.yml", Mock(), runner
+            )
+        self.assertEqual(["upload", "edit"], [args[2] for args in writes])
+        self.assertIn(str(output / missing["name"]), writes[0])
+        self.assertNotIn("--clobber", writes[0])
+        self.assertIn("--draft=false", writes[-1])
+
+    def test_existing_mismatch_prevents_all_uploads(self):
+        release, output = self.plugin()
+        client = FakeGitHub()
+        remote = client.add(FIRST, release, output, draft=True)
+        client.assets[FIRST["repository"], remote["assets"][0]["id"]] = b"different"
+        remote["assets"].pop()
+        runner = Mock()
+        with (
+            patch("jellysin_tooling.release.exact_tag", return_value=COMMIT),
+            self.assertRaisesRegex(ValidationError, "differs"),
+        ):
+            publish(
+                client, output, FIRST["repository"], release["tag"], ".github/workflows/release.yml", Mock(), runner
+            )
+        runner.assert_not_called()
+
+    def test_published_incomplete_release_is_never_repaired_by_mutation(self):
+        release, output = self.plugin()
+        client = FakeGitHub()
+        remote = client.add(FIRST, release, output)
+        remote["assets"].pop()
+        with self.assertRaisesRegex(ValidationError, "do not mutate"):
+            reconcile_assets(client, remote, local_artifacts(output, release), FIRST["repository"], release["tag"])
+
+    def test_wrong_event_ref_or_commit_blocks_publication(self):
+        release, output = self.plugin()
+        values = {
+            "GITHUB_ACTIONS": "true",
+            "GITHUB_REF": "refs/heads/main",
+            "GITHUB_REPOSITORY": FIRST["repository"],
+            "GITHUB_SHA": COMMIT,
+        }
+        with (
+            patch.dict(os.environ, values),
+            patch("jellysin_tooling.release.exact_tag", return_value=COMMIT),
+            self.assertRaisesRegex(ValidationError, "tag ref"),
+        ):
+            publish(Mock(), output, FIRST["repository"], release["tag"], ".github/workflows/release.yml")
+        values.update(GITHUB_REF="refs/tags/v1.0.0", GITHUB_SHA="b" * 40)
+        with (
+            patch.dict(os.environ, values),
+            patch("jellysin_tooling.release.exact_tag", return_value=COMMIT),
+            self.assertRaisesRegex(ValidationError, "source differs"),
+        ):
+            publish(Mock(), output, FIRST["repository"], release["tag"], ".github/workflows/release.yml")
+
+    def test_changed_checksum_file_missing_file_and_extra_remote_asset_fail(self):
+        release, output = self.plugin()
+        client = FakeGitHub()
+        remote = client.add(FIRST, release, output)
+        extra = copy.deepcopy(remote["assets"][0])
+        extra["name"] = "extra.txt"
+        extra["browser_download_url"] = extra["browser_download_url"].rsplit("/", 1)[0] + "/extra.txt"
+        remote["assets"].append(extra)
+        with self.assertRaisesRegex(ValidationError, "Unexpected"):
+            reconcile_assets(client, remote, local_artifacts(output, release), FIRST["repository"], release["tag"])
+        (output / "checksums.txt").write_bytes(b"forged")
+        with self.assertRaisesRegex(ValidationError, "checksum"):
+            local_artifacts(output, release)
+        (output / "checksums.txt").unlink()
+        with self.assertRaisesRegex(ValidationError, "Missing"):
+            local_artifacts(output, release)
+
+    def test_local_exact_tag_checks_head_and_tracked_changes(self):
+        with patch("jellysin_tooling.release.command", side_effect=[COMMIT, COMMIT, ""]) as run:
+            self.assertEqual(COMMIT, exact_tag("v1.0.0"))
+        self.assertIn("HEAD", run.call_args.args[0])
+        with (
+            patch("jellysin_tooling.release.command", side_effect=[COMMIT, "b" * 40]),
+            self.assertRaisesRegex(ValidationError, "exact"),
+        ):
+            exact_tag("v1.0.0")
+        with self.assertRaises(ValidationError):
+            exact_tag("main")
+
+    def test_remote_tag_resolves_annotated_tags_and_bounds_nesting(self):
+        client = Mock()
+        client.api.side_effect = [
+            {"object": {"type": "tag", "sha": "b" * 40}},
+            {"object": {"type": "commit", "sha": COMMIT}},
+        ]
+        self.assertEqual(COMMIT, remote_tag(client, FIRST["repository"], "v1.0.0"))
+        client.api.side_effect = None
+        client.api.return_value = {"object": {"type": "tag", "sha": "b" * 40}}
+        with self.assertRaisesRegex(ValueError, "nesting"):
+            remote_tag(client, FIRST["repository"], "v1.0.0")

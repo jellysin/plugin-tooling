@@ -1,0 +1,44 @@
+name: Package Jellyfin plugin
+description: Build a deterministic flat plugin ZIP, release metadata, checksums, and SPDX SBOM.
+inputs:
+  publish-directory:
+    description: Directory containing the plugin-owned build outputs.
+    required: true
+  metadata-path:
+    description: Plugin descriptor.
+    default: plugin.json
+  version-path:
+    description: Three-part stable SemVer file.
+    default: version.txt
+  output-directory:
+    description: Release artifact directory.
+    default: dist
+  tag:
+    description: Exact checked-out release tag; omit only for CI packaging checks.
+    default: ''
+outputs:
+  archive:
+    description: Absolute path to the plugin ZIP.
+    value: ${{ steps.package.outputs.archive }}
+  directory:
+    description: Absolute release artifact directory.
+    value: ${{ steps.package.outputs.directory }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        python-version: '3.14.7'
+    - id: package
+      shell: bash
+      env:
+        TOOL_ROOT: ${{ github.action_path }}/../..
+        PUBLISH_DIRECTORY: ${{ inputs.publish-directory }}
+        METADATA_PATH: ${{ inputs.metadata-path }}
+        VERSION_PATH: ${{ inputs.version-path }}
+        OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
+        RELEASE_TAG: ${{ inputs.tag }}
+      run: |
+        args=(package --publish-directory "$PUBLISH_DIRECTORY" --metadata-path "$METADATA_PATH" --version-path "$VERSION_PATH" --output-directory "$OUTPUT_DIRECTORY")
+        if [[ -n "$RELEASE_TAG" ]]; then args+=(--tag "$RELEASE_TAG"); fi
+        python "$TOOL_ROOT/tools.py" "${args[@]}"

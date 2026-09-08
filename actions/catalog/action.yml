@@ -1,0 +1,25 @@
+name: Reconcile Jellyfin catalog
+description: Verify allowlisted public release attestations and add immutable catalog entries.
+inputs:
+  manifest:
+    description: Existing catalog array file.
+    default: manifest.json
+  allowlist:
+    description: Reviewed list of plugin GUIDs and source repositories.
+    default: plugins.json
+  token:
+    description: Catalog repository's built-in GITHUB_TOKEN, used for API reads only.
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        python-version: '3.14.7'
+    - shell: bash
+      env:
+        TOOL_ROOT: ${{ github.action_path }}/../..
+        MANIFEST_PATH: ${{ inputs.manifest }}
+        ALLOWLIST_PATH: ${{ inputs.allowlist }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: python "$TOOL_ROOT/tools.py" catalog --manifest "$MANIFEST_PATH" --allowlist "$ALLOWLIST_PATH"

@@ -1,0 +1,25 @@
+name: Publish verified release
+description: Reconcile a release-please draft without replacing any existing bytes, then publish.
+inputs:
+  directory:
+    description: Directory produced by the package action and attested by the caller workflow.
+    default: dist
+  tag:
+    description: Exact tag used as the workflow dispatch ref.
+    required: true
+  token:
+    description: Calling repository's built-in GITHUB_TOKEN.
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        python-version: '3.14.7'
+    - shell: bash
+      env:
+        TOOL_ROOT: ${{ github.action_path }}/../..
+        RELEASE_DIRECTORY: ${{ inputs.directory }}
+        RELEASE_TAG: ${{ inputs.tag }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: python "$TOOL_ROOT/tools.py" publish --directory "$RELEASE_DIRECTORY" --tag "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY"

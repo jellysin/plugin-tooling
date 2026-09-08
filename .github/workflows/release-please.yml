@@ -1,0 +1,69 @@
+name: Shared release automation
+on:
+  workflow_call:
+    inputs:
+      publish:
+        description: Dispatch the caller's publication workflow on each new release tag.
+        type: boolean
+        default: true
+      publication-workflow:
+        description: Caller workflow that verifies, builds, attests and publishes the exact tag.
+        type: string
+        default: release.yml
+    outputs:
+      tag:
+        description: Newly created root release tag, if any.
+        value: ${{ jobs.release.outputs.tag }}
+permissions:
+  contents: read
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      actions: write
+    outputs:
+      tag: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
+        with:
+          token: ${{ github.token }}
+          target-branch: main
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14.7'
+      - name: Explicitly dispatch checks and exact-tag publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_PRS: ${{ steps.release.outputs.prs || '[]' }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
+          PUBLISH_RELEASE: ${{ inputs.publish }}
+          PUBLICATION_WORKFLOW: ${{ inputs.publication-workflow }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          prs = json.loads(os.environ['RELEASE_PRS'])
+          if not isinstance(prs, list) or len(prs) > 20:
+              raise SystemExit('Unexpected release PR output')
+          for pr in prs:
+              branch = pr['headBranchName']
+              if not branch.startswith('release-please--branches--main') or pr['baseBranchName'] != 'main':
+                  raise SystemExit('Unexpected release PR branch')
+              subprocess.run(['gh', 'workflow', 'run', 'ci.yml', '--repo', os.environ['GITHUB_REPOSITORY'], '--ref', branch], check=True, timeout=60)
+          tag = os.environ['RELEASE_TAG']
+          if tag and os.environ['PUBLISH_RELEASE'] == 'true':
+              workflow = os.environ['PUBLICATION_WORKFLOW']
+              if not re.fullmatch(r'v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', tag):
+                  raise SystemExit('Unexpected release tag')
+              if not re.fullmatch(r'[a-z0-9-]+\.yml', workflow):
+                  raise SystemExit('Unexpected publication workflow')
+              subprocess.run(['gh', 'workflow', 'run', workflow, '--repo', os.environ['GITHUB_REPOSITORY'], '--ref', tag], check=True, timeout=60)
+          PY
